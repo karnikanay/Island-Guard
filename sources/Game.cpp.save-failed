@@ -1,0 +1,139 @@
+#include "../headers/Game.hpp"
+#include <iostream>
+
+Game::Game(sf::RenderWindow* windowPointer)
+{
+    igWindow = windowPointer;
+
+    // Load the game resources
+    igBackgroundTexture.loadFromFile("resources/images/background.png");
+    igPlayerTexture.loadFromFile("resources/images/player.png");
+    igIslandChecker = igBackgroundTexture.copyToImage();
+    igEnemyTexture.loadFromFile("resources/images/enemy.png");
+    igBulletTexture.loadFromFile("resources/images/bullet.png");
+    igWaterColor = igIslandChecker.getPixel(1, 1);
+
+    igBackground.setTexture(igBackgroundTexture);
+
+    igPlayer = new Player(igPlayerTexture, igWindow);
+    igPlayer->setPos(IG_WINDOW_WIDTH/2, IG_WINDOW_HEIGHT/2);
+
+    for(int i = 0; i < enemyQuota; i++)
+    {
+        igEnemy[i] = new Enemy(igEnemyTexture, igWindow);
+    }
+
+}
+
+void Game::start()
+{
+    while(igWindow->isOpen())
+    {
+        processEvents();
+        update();
+        render();
+    }
+}
+
+void Game::processEvents()
+{
+    sf::Event e;
+    while(igWindow->pollEvent(e))
+    {
+        switch(e.type)
+        {
+        case sf::Event::Closed:
+            igWindow->close();
+            break;
+        case sf::Event::MouseButtonPressed:
+            handleMouse(e.mouseButton.button, e.mouseButton.x, e.mouseButton.y);
+        default:
+            break;
+        }
+    }
+}
+
+void Game::update()
+{
+    igPlayer->update();
+    if(igIslandChecker.getPixel((int)igPlayer->getPosition().x, (int)igPlayer->getPosition().y) == igWaterColor)
+    {
+        igPlayer->move(-1);
+    }
+
+    for(std::list<Bullet>::iterator it = igBullets.begin(); it != igBullets.end(); it++)
+    {
+        it->update();
+    }
+
+    for(int i = 0; i < enemyQuota; i++)
+    {
+        igEnemy[i]->moveTo(igPlayer->getPosition().x, igPlayer->getPosition().y);
+        igEnemy[i]->update();
+        if(igIslandChecker.getPixel((int)igEnemy[i]->getPosition().x, (int)igEnemy[i]->getPosition().y) != igWaterColor)
+        {
+            sf::CircleShape blast;
+            blast.setRadius(40.f);
+            blast.setOrigin(blast.getRadius(), blast.getRadius());
+            blast.setFillColor(igWaterColor);
+            igEnemy[i]->move(-1);
+            blast.setPosition(igEnemy[i]->getPosition());
+            igBlasts.push_back(blast);
+            for(int i = (int)(blast.getPosition().x - blast.getRadius()); i < blast.getPosition().x + blast.getRadius(); i++)
+            {
+                for(int j = (int)(blast.getPosition().y - blast.getRadius()); j < blast.getPosition().y + blast.getRadius(); j++)
+                {
+                    if(distanceBetween(blast.getPosition(), sf::Vector2f((float)i,(float)j)) <= blast.getRadius())
+                        igIslandChecker.setPixel(i, j, igWaterColor);
+                }
+            }
+            delete igEnemy[i];
+            igEnemy[i] = new Enemy(igEnemyTexture, igWindow);
+        }
+    }
+}
+
+void Game::render()
+{
+    igWindow->clear(sf::Color(128, 128, 128));
+
+    igWindow->draw(igBackground);
+
+    for(std::list<sf::CircleShape>::iterator it = igBlasts.begin(); it != igBlasts.end(); it++)
+    {
+        igWindow->draw(*it);
+    }
+
+    for(std::list<Bullet>::iterator it = igBullets.begin(); it != igBullets.end(); it++)
+    {
+        it->draw();
+    }
+
+    igPlayer->draw();
+    for(int i = 0; i < enemyQuota; i++)
+    {
+        igEnemy[i]->draw();
+    }
+
+    igWindow->display();
+}
+
+void Game::handleMouse(sf::Mouse::Button button, int x, int y)
+{
+    switch(button)
+    {
+    case sf::Mouse::Left:
+        igPlayer->moveTo((float)x, (float)y);
+        break;
+    case sf::Mouse::Right:
+        Bullet bullet = Bullet(igBulletTexture, igWindow, igPlayer->getShootPosition(x, y), sf::Vector2f(x, y));
+        igBullets.push_back(bullet);
+        break;
+    }
+}
+
+float Game::distanceBetween(sf::Vector2f p1, sf::Vector2f p2)
+{
+    int distance = sqrt((double)((p1.x - p2.x)*(p1.x - p2.x) + (p1.y - p2.y)*(p1.y - p2.y)));
+    return distance;
+}
